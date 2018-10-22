@@ -12,7 +12,7 @@ import java.util.List;
 public class DelaunayTriangulator {
 
     private List<Vector2D> pointSet;
-    private TriangleSoup triangleSoup;
+    public TriangleSoup triangleSoup;
 
     /**
      * Constructor of the SimpleDelaunayTriangulator class used to create a new

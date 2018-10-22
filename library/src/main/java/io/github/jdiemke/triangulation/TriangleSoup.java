@@ -9,7 +9,7 @@ import java.util.List;
  * 
  * @author Johannes Diemke
  */
-class TriangleSoup {
+public class TriangleSoup {
 
     private List<Triangle2D> triangleSoup;
 
