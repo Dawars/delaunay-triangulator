@@ -25,7 +25,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
  *
  * @author Johannes Diemke
  */
-public class DelaunayTriangulationExample implements GLEventListener, MouseListener, MouseMotionListener, KeyListener {
+public class DelaunayTriangulationExample implements GLEventListener, MouseListener, MouseMotionListener {
 
     private static final Dimension DIMENSION = new Dimension(640, 480);
 
@@ -35,6 +35,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
     private static final Color COLOR_TRIANGLE_EDGES = new Color(5, 234, 234);
     private static final Color COLOR_HULL_EDGE = new Color(1, 120, 234);
     private static final Color COLOR_FIXED_EDGE = new Color(126, 58, 234);
+    private static final Color COLOR_CIRCUM_CENTER = new Color(234, 155, 33);
     private static final Color COLOR_TRIANGLE_BORDER = new Color(241, 241, 121);
     private static final Color COLOR_BACKGROUND = new Color(47, 47, 47);
 
@@ -62,7 +63,6 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         canvas.addGLEventListener(this);
         canvas.setPreferredSize(DIMENSION);
         canvas.addMouseListener(this);
-        canvas.addKeyListener(this);
         canvas.addMouseMotionListener(this);
 
         frame.add(canvas);
@@ -99,7 +99,10 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         mb.add(fileMenu);
 
         Menu actionMenu = new Menu("Action");
+        // todo standard delaunay triangulation
+        MenuItem fixEdgeItem = new MenuItem("Fix edges");
         MenuItem splitEdgeItem = new MenuItem("Split edge");
+        actionMenu.add(fixEdgeItem);
         actionMenu.add(splitEdgeItem);
 
         mb.add(actionMenu);
@@ -142,7 +145,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                         out.write(String.valueOf(p.y));
                         out.newLine();
                     }
-
+                    // todo triangle list
                 } catch (IOException e1) {
                     e1.printStackTrace();
                 }
@@ -195,6 +198,9 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
 
         splitEdgeItem.addActionListener(e -> {
             MODE = EDIT_MODES.SPLIT_EDGE;
+        });
+        fixEdgeItem.addActionListener(e -> {
+            MODE = EDIT_MODES.SET_EDGE_CONSTRAINT;
         });
     }
 
@@ -324,6 +330,23 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
             gl.glVertex2d(vector.x, vector.y);
         }
 
+        gl.glEnd();
+
+        // draw circumcenters
+        gl.glPointSize(5.5f);
+        gl.glColor3f(0.2f, 1.2f, 0.25f);
+
+        gl.glColor3ub((byte) COLOR_CIRCUM_CENTER.getRed(), (byte) COLOR_CIRCUM_CENTER.getGreen(),
+                (byte) COLOR_CIRCUM_CENTER.getBlue());
+        gl.glBegin(GL.GL_POINTS);
+
+        for (Triangle2D triangle : delaunayTriangulator.getTriangles()) {
+            Vector2D center = triangle.getCircumcenter();
+            gl.glVertex2d(center.x, center.y);
+
+        }
+        // draw circles
+        //R = Math.sqrt((c_0 - p_0)^2 + (c_1 - p_1)^2)
         gl.glEnd();
 
 // angle debug
@@ -459,11 +482,8 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
 
             soup.remove(tri);
 
-            Vector2D point = null; // selecting opposite vertex to edge
-            if (tri.a != edge.a && tri.a != edge.b) point = tri.a;
-            if (tri.b != edge.a && tri.b != edge.b) point = tri.b;
-            if (tri.c != edge.a && tri.c != edge.b) point = tri.c;
-
+            // selecting opposing vertex to edge
+            Vector2D point = tri.getNoneEdgeVertex(edge);
 
             soup.add(new Triangle2D(point, edge.a, middle));
             soup.add(new Triangle2D(point, edge.b, middle));
@@ -577,32 +597,5 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
     public void mouseMoved(MouseEvent e) {
         cursor.x = e.getX();
         cursor.y = e.getY();
-    }
-
-    @Override
-    public void keyTyped(KeyEvent e) {
-
-    }
-
-    public static boolean isMac() {
-        String OS = System.getProperty("os.name").toLowerCase();
-        return OS.contains("mac");
-    }
-
-    @Override
-    public void keyPressed(KeyEvent e) {
-        if ((!isMac() && e.getExtendedKeyCode() == KeyEvent.VK_CONTROL) ||
-                (isMac() && e.getExtendedKeyCode() == KeyEvent.VK_META)) {
-            MODE = EDIT_MODES.SET_EDGE_CONSTRAINT;
-        }
-    }
-
-    @Override
-    public void keyReleased(KeyEvent e) {
-        if ((!isMac() && e.getExtendedKeyCode() == KeyEvent.VK_CONTROL) ||
-                (isMac() && e.getExtendedKeyCode() == KeyEvent.VK_META)) {
-            MODE = EDIT_MODES.INSERT_VERTEX;
-        }
-
     }
 }
