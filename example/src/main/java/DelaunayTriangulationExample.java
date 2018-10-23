@@ -25,7 +25,7 @@ import javax.swing.filechooser.FileNameExtensionFilter;
  *
  * @author Johannes Diemke
  */
-public class DelaunayTriangulationExample implements GLEventListener, MouseListener, KeyListener {
+public class DelaunayTriangulationExample implements GLEventListener, MouseListener, MouseMotionListener, KeyListener {
 
     private static final Dimension DIMENSION = new Dimension(640, 480);
 
@@ -40,6 +40,8 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
 
     DelaunayTriangulator delaunayTriangulator;
     List<Vector2D> pointSet = new ArrayList<>();
+
+    Vector2D cursor = new Vector2D(0, 0);
 
     public static void main(String[] args) throws ClassNotFoundException, UnsupportedLookAndFeelException, InstantiationException, IllegalAccessException {
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -61,6 +63,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         canvas.setPreferredSize(DIMENSION);
         canvas.addMouseListener(this);
         canvas.addKeyListener(this);
+        canvas.addMouseMotionListener(this);
 
         frame.add(canvas);
 
@@ -322,6 +325,11 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         }
 
         gl.glEnd();
+
+// angle debug
+
+        Triangle2D tri = delaunayTriangulator.triangleSoup.findContainingTriangle(cursor);
+        if (tri != null) System.out.println("Angle: " + Math.toDegrees(getSmallestAngle(tri)));
     }
 
     private void fillTriangle(GL2 gl, Triangle2D triangle, Color color) {
@@ -342,19 +350,9 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
 
         List<Triangle2D> tris = delaunayTriangulator.getTriangles();
 
-        for (int i = 0; i < delaunayTriangulator.getTriangles().size(); i++) {
-            Triangle2D tri = delaunayTriangulator.getTriangles().get(i);
-            Vector2D a = tri.a;
-            Vector2D b = tri.b;
-            Vector2D c = tri.c;
-
-            Double[] angle = {
-                    getAngle(a, b, c),
-                    getAngle(b, c, a),
-                    getAngle(c, a, b),
-            };
-
-            Double min = Collections.min(Arrays.asList(angle));
+        for (int i = 0; i < tris.size(); i++) {
+            Triangle2D tri = tris.get(i);
+            double min = getSmallestAngle(tri);
             if (minAngle > min) {
                 minAngle = min;
                 smallestTri = i;
@@ -364,14 +362,28 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         return smallestTri;
     }
 
+    private double getSmallestAngle(Triangle2D tri) {
+        Vector2D a = tri.a;
+        Vector2D b = tri.b;
+        Vector2D c = tri.c;
+
+        Double[] angle = {
+                getAngle(a, b, c),
+                getAngle(b, c, a),
+                getAngle(c, a, b),
+        };
+
+        return Collections.min(Arrays.asList(angle));
+    }
+
     private int findLargestArea() {
         double maxArea = Double.MIN_VALUE;
         int biggestArea = -1;
 
         List<Triangle2D> tris = delaunayTriangulator.getTriangles();
 
-        for (int i = 0; i < delaunayTriangulator.getTriangles().size(); i++) {
-            Triangle2D tri = delaunayTriangulator.getTriangles().get(i);
+        for (int i = 0; i < tris.size(); i++) {
+            Triangle2D tri = tris.get(i);
             Vector2D a = tri.a;
             Vector2D b = tri.b;
             Vector2D c = tri.c;
@@ -420,9 +432,6 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         }
     }
 
-    public void displayChanged(GLAutoDrawable drawable, boolean modeChanged, boolean deviceChanged) {
-    }
-
     @Override
     public void dispose(GLAutoDrawable drawable) {
     }
@@ -441,13 +450,12 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         Triangle2D tri1 = soup.findOneTriangleSharing(edge);
         Triangle2D tri2 = soup.findNeighbour(tri1, edge);
 
-
         Vector2D middle = edge.a.add(edge.b).mult(0.5);
-        pointSet.add(middle);
+
         Triangle2D[] tris = {tri1, tri2};
         for (Triangle2D tri : tris) {
             if (tri == null) // if first triangle is null, edge is not in any triangle, otherwise border
-                return;
+                continue;
 
             soup.remove(tri);
 
@@ -460,6 +468,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
             soup.add(new Triangle2D(point, edge.a, middle));
             soup.add(new Triangle2D(point, edge.b, middle));
         }
+        pointSet.add(middle);
 
         if (fixedEdges.contains(edge)) {
             fixedEdges.remove(edge);
@@ -555,6 +564,19 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
 
     @Override
     public void mouseExited(MouseEvent e) {
+        cursor.x = 0;
+        cursor.y = 0;
+    }
+
+    @Override
+    public void mouseDragged(MouseEvent e) {
+
+    }
+
+    @Override
+    public void mouseMoved(MouseEvent e) {
+        cursor.x = e.getX();
+        cursor.y = e.getY();
     }
 
     @Override
