@@ -96,8 +96,8 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         mb.add(fileMenu);
 
         Menu actionMenu = new Menu("Action");
-//        MenuItem
-//        actionMenu.add()
+        MenuItem splitEdgeItem = new MenuItem("Split edge");
+        actionMenu.add(splitEdgeItem);
 
         mb.add(actionMenu);
 
@@ -190,8 +190,19 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
             }
         });
 
-
+        splitEdgeItem.addActionListener(e -> {
+            MODE = EDIT_MODES.SPLIT_EDGE;
+        });
     }
+
+    enum EDIT_MODES {
+        INSERT_VERTEX,
+        SET_EDGE_CONSTRAINT,
+        SPLIT_EDGE
+    }
+
+    final EDIT_MODES DEFAULT = EDIT_MODES.INSERT_VERTEX;
+    EDIT_MODES MODE = EDIT_MODES.INSERT_VERTEX;
 
     public void init(GLAutoDrawable drawable) {
         GL2 gl = drawable.getGL().getGL2();
@@ -320,7 +331,6 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         Vector2D b = triangle.b;
         Vector2D c = triangle.c;
 
-
         gl.glVertex2d(a.x, a.y);
         gl.glVertex2d(b.x, b.y);
         gl.glVertex2d(c.x, c.y);
@@ -421,17 +431,63 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
     public void mouseClicked(MouseEvent e) {
     }
 
+    /**
+     * Inserts vertex in the middle of an edge, splits adjacent triangles, updates edge constraints
+     *
+     * @param edge being split
+     */
+    public void splitEdge(Edge2D edge) {
+        TriangleSoup soup = delaunayTriangulator.triangleSoup;
+        Triangle2D tri1 = soup.findOneTriangleSharing(edge);
+        Triangle2D tri2 = soup.findNeighbour(tri1, edge);
+
+
+        Vector2D middle = edge.a.add(edge.b).mult(0.5);
+        pointSet.add(middle);
+        Triangle2D[] tris = {tri1, tri2};
+        for (Triangle2D tri : tris) {
+            if (tri == null) // if first triangle is null, edge is not in any triangle, otherwise border
+                return;
+
+            soup.remove(tri);
+
+            Vector2D point = null; // selecting opposite vertex to edge
+            if (tri.a != edge.a && tri.a != edge.b) point = tri.a;
+            if (tri.b != edge.a && tri.b != edge.b) point = tri.b;
+            if (tri.c != edge.a && tri.c != edge.b) point = tri.c;
+
+
+            soup.add(new Triangle2D(point, edge.a, middle));
+            soup.add(new Triangle2D(point, edge.b, middle));
+        }
+
+        if (fixedEdges.contains(edge)) {
+            fixedEdges.remove(edge);
+            fixedEdges.add(new Edge2D(edge.a, middle));
+            fixedEdges.add(new Edge2D(edge.b, middle));
+        }
+
+        updateCalculations();
+    }
+
+
     @Override
     public void mousePressed(MouseEvent e) {
         Point p = e.getPoint();
-        if (selectMode) {
-            // toggle edge
-            TriangleSoup soup = delaunayTriangulator.triangleSoup;
-            Edge2D edge = soup.findNearestEdge(new Vector2D(p.x, p.y));
-            toggleEdge(edge);
-
-        } else {
-            addPoints(p);
+        TriangleSoup soup = delaunayTriangulator.triangleSoup;
+        switch (MODE) {
+            case SET_EDGE_CONSTRAINT:
+                // toggle edge
+                Edge2D edge = soup.findNearestEdge(new Vector2D(p.x, p.y));
+                toggleEdge(edge);
+                break;
+            case INSERT_VERTEX:
+                addPoints(p);
+                break;
+            case SPLIT_EDGE:
+                Edge2D edge2split = soup.findNearestEdge(new Vector2D(p.x, p.y));
+                splitEdge(edge2split);
+                break;
         }
     }
 
@@ -480,10 +536,10 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                     new Edge2D(tri.b, tri.c),
                     new Edge2D(tri.c, tri.a),
             };
+
             for (Edge2D edge : edges) {
                 if (delaunayTriangulator.triangleSoup.findNeighbour(tri, edge) == null)
                     hull.add(edge);
-
             }
         }
     }
@@ -506,8 +562,6 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
 
     }
 
-    boolean selectMode = false; // true when toggling edges
-
     public static boolean isMac() {
         String OS = System.getProperty("os.name").toLowerCase();
         return OS.contains("mac");
@@ -517,7 +571,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
     public void keyPressed(KeyEvent e) {
         if ((!isMac() && e.getExtendedKeyCode() == KeyEvent.VK_CONTROL) ||
                 (isMac() && e.getExtendedKeyCode() == KeyEvent.VK_META)) {
-            selectMode = true;
+            MODE = EDIT_MODES.SET_EDGE_CONSTRAINT;
         }
     }
 
@@ -525,7 +579,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
     public void keyReleased(KeyEvent e) {
         if ((!isMac() && e.getExtendedKeyCode() == KeyEvent.VK_CONTROL) ||
                 (isMac() && e.getExtendedKeyCode() == KeyEvent.VK_META)) {
-            selectMode = false;
+            MODE = EDIT_MODES.INSERT_VERTEX;
         }
 
     }
