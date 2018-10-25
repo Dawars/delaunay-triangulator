@@ -44,6 +44,10 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
 
     Vector2D cursor = new Vector2D(0, 0);
 
+    // display info options
+    private boolean showCenters = false; // circumcircles
+    private boolean showCircles = false; // circumcircles
+
     public static void main(String[] args) throws ClassNotFoundException, UnsupportedLookAndFeelException, InstantiationException, IllegalAccessException {
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 
@@ -99,13 +103,38 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         mb.add(fileMenu);
 
         Menu actionMenu = new Menu("Action");
-        // todo standard delaunay triangulation
+        MenuItem addVertexItem = new MenuItem("Add vertex");
+        MenuItem triangulateItem = new MenuItem("Delaunay triangulation");
         MenuItem fixEdgeItem = new MenuItem("Fix edges");
         MenuItem splitEdgeItem = new MenuItem("Split edge");
-        actionMenu.add(fixEdgeItem);
+        MenuItem insertCenterItem = new MenuItem("Insert vertex to circumcenter");
+        MenuItem startTriangulationItem = new MenuItem("Constrained triangulation");
+        MenuItem animationItem = new MenuItem("Step-by-step triangulation");
+        actionMenu.add(addVertexItem);
+        actionMenu.add(triangulateItem);
         actionMenu.add(splitEdgeItem);
+        actionMenu.add(insertCenterItem);
+        actionMenu.add(startTriangulationItem);
+        actionMenu.add(animationItem);
 
         mb.add(actionMenu);
+
+
+        Menu viewMenu = new Menu("View");
+        MenuItem showCircleItem = new MenuItem("Show/hide circumcircle");
+        MenuItem showCircleCenterItem = new MenuItem("Show/hide circumcircle centers");
+        MenuItem showViolationItem = new MenuItem("Show/hide constraint violations");
+        viewMenu.add(showCircleItem);
+        viewMenu.add(showCircleCenterItem);
+        viewMenu.add(showViolationItem);
+        mb.add(viewMenu);
+
+        Menu constraintMenu = new Menu("Constraints");
+        MenuItem setAreaItem = new MenuItem("Set maximum area");
+        MenuItem setAngleItem = new MenuItem("Set min angle"); // or radius/smallest side ration?
+        constraintMenu.add(setAreaItem);
+        constraintMenu.add(setAngleItem);
+        mb.add(constraintMenu);
 
         frame.setMenuBar(mb);
 
@@ -116,9 +145,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
             pointSet.clear();
             try {
                 delaunayTriangulator.triangulate();
-            } catch (NotEnoughPointsException e1) {
-                // not enough vertices, that's ok
-            }
+            } catch (NotEnoughPointsException e1) { }
             updateCalculations();
         });
 
@@ -145,7 +172,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                         out.write(String.valueOf(p.y));
                         out.newLine();
                     }
-                    // todo triangle list
+                    // todo save triangle list
                 } catch (IOException e1) {
                     e1.printStackTrace();
                 }
@@ -178,6 +205,8 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                         pointSet.add(new Vector2D(Double.parseDouble(vec[0]), Double.parseDouble(vec[1])));
                     }
 
+                    // todo load triangles
+
                     System.out.println("File successfully loaded");
 
                 } catch (FileNotFoundException e1) {
@@ -186,14 +215,22 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                     e1.printStackTrace();
                 }
 
-
-                try {
-                    delaunayTriangulator.triangulate();
-                } catch (NotEnoughPointsException e1) {
-                    e1.printStackTrace();
-                }
                 updateCalculations();
             }
+        });
+
+        addVertexItem.addActionListener(e -> {
+            MODE = EDIT_MODES.INSERT_VERTEX;
+        });
+
+        triangulateItem.addActionListener(e -> {
+            try {
+                delaunayTriangulator.triangulate();
+            } catch (NotEnoughPointsException e1) {
+                // that's fine
+            }
+
+            updateCalculations();
         });
 
         splitEdgeItem.addActionListener(e -> {
@@ -202,12 +239,19 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         fixEdgeItem.addActionListener(e -> {
             MODE = EDIT_MODES.SET_EDGE_CONSTRAINT;
         });
+        insertCenterItem.addActionListener(e -> {
+            MODE = EDIT_MODES.INSERT_TO_CENTER;
+        });
+
+        showCircleItem.addActionListener(e -> showCircles = !showCircles);
+        showCircleCenterItem.addActionListener(e -> showCenters = !showCenters);
     }
 
     enum EDIT_MODES {
         INSERT_VERTEX,
         SET_EDGE_CONSTRAINT,
-        SPLIT_EDGE
+        SPLIT_EDGE,
+        INSERT_TO_CENTER
     }
 
     final EDIT_MODES DEFAULT = EDIT_MODES.INSERT_VERTEX;
@@ -333,26 +377,52 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         gl.glEnd();
 
         // draw circumcenters
-        gl.glPointSize(5.5f);
-        gl.glColor3f(0.2f, 1.2f, 0.25f);
+        if (showCenters) {
+            gl.glPointSize(5.5f);
 
-        gl.glColor3ub((byte) COLOR_CIRCUM_CENTER.getRed(), (byte) COLOR_CIRCUM_CENTER.getGreen(),
-                (byte) COLOR_CIRCUM_CENTER.getBlue());
-        gl.glBegin(GL.GL_POINTS);
+            gl.glColor3ub((byte) COLOR_CIRCUM_CENTER.getRed(), (byte) COLOR_CIRCUM_CENTER.getGreen(),
+                    (byte) COLOR_CIRCUM_CENTER.getBlue());
+            gl.glBegin(GL.GL_POINTS);
 
-        for (Triangle2D triangle : delaunayTriangulator.getTriangles()) {
-            Vector2D center = triangle.getCircumcenter();
-            gl.glVertex2d(center.x, center.y);
+            for (Triangle2D triangle : delaunayTriangulator.getTriangles()) {
+                Vector2D center = triangle.circumcenter;
+                gl.glVertex2d(center.x, center.y);
 
+            }
+            gl.glEnd();
         }
-        // draw circles
-        //R = Math.sqrt((c_0 - p_0)^2 + (c_1 - p_1)^2)
-        gl.glEnd();
+        if (showCircles) {
+            gl.glLineWidth(3.0f);
+            gl.glColor3ub((byte) COLOR_CIRCUM_CENTER.getRed(), (byte) COLOR_CIRCUM_CENTER.getGreen(),
+                    (byte) COLOR_CIRCUM_CENTER.getBlue());
+            gl.glBegin(GL.GL_LINES);
 
-// angle debug
+            // draw circles
+            for (Triangle2D triangle : delaunayTriangulator.getTriangles()) {
+                Vector2D center = triangle.circumcenter;
+                double R = triangle.radius;
 
-        Triangle2D tri = delaunayTriangulator.triangleSoup.findContainingTriangle(cursor);
-        if (tri != null) System.out.println("Angle: " + Math.toDegrees(getSmallestAngle(tri)));
+                int res = 5;
+
+                for (int i = 0; i < 360; i += res) {
+                    double deg = Math.toRadians(i);
+
+                    Vector2D p = center.add(new Vector2D(R * Math.cos(deg), R * Math.sin(deg)));
+                    gl.glVertex2d(p.x, p.y);
+
+                    deg = Math.toRadians(i + res);
+
+                    p = center.add(new Vector2D(R * Math.cos(deg), R * Math.sin(deg)));
+                    gl.glVertex2d(p.x, p.y);
+                }
+            }
+
+            gl.glEnd();
+        }
+
+        // angle debug
+//        Triangle2D tri = delaunayTriangulator.triangleSoup.findContainingTriangle(cursor);
+//        if (tri != null) System.out.println("Angle: " + Math.toDegrees(getSmallestAngle(tri)));
     }
 
     private void fillTriangle(GL2 gl, Triangle2D triangle, Color color) {
@@ -499,10 +569,24 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         updateCalculations();
     }
 
+    /**
+     * Insert a vertex to the circumcenter of the triangle and restore triangulation
+     *
+     * @param triangle
+     * @return
+     */
+    public boolean insertCircumcenter(Triangle2D triangle) {
+        Vector2D center = triangle.circumcenter;
+
+
+        return true;
+    }
+
 
     @Override
     public void mousePressed(MouseEvent e) {
         Point p = e.getPoint();
+        Vector2D point = new Vector2D(p.x, p.y);
         TriangleSoup soup = delaunayTriangulator.triangleSoup;
         switch (MODE) {
             case SET_EDGE_CONSTRAINT:
@@ -511,11 +595,15 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                 toggleEdge(edge);
                 break;
             case INSERT_VERTEX:
-                addPoints(p);
+                addPoints(point);
                 break;
             case SPLIT_EDGE:
                 Edge2D edge2split = soup.findNearestEdge(new Vector2D(p.x, p.y));
                 splitEdge(edge2split);
+                break;
+            case INSERT_TO_CENTER:
+                Triangle2D triangle = soup.findContainingTriangle(point);
+                insertCircumcenter(triangle);
                 break;
         }
     }
@@ -543,13 +631,8 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
      *
      * @param p
      */
-    private void addPoints(Point p) {
-        pointSet.add(new Vector2D(p.x, p.y));
-
-        try {
-            delaunayTriangulator.triangulate();
-        } catch (NotEnoughPointsException e1) {
-        }
+    private void addPoints(Vector2D p) {
+        pointSet.add(p);
 
         updateCalculations();
     }

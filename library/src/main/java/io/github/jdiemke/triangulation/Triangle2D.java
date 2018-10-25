@@ -9,9 +9,12 @@ import java.util.Arrays;
  */
 public class Triangle2D {
 
-    public Vector2D a;
-    public Vector2D b;
-    public Vector2D c;
+    public final Vector2D a;
+    public final Vector2D b;
+    public final Vector2D c;
+
+    public final Vector2D circumcenter;
+    public final double radius;
 
     /**
      * Constructor of the 2D triangle class used to create a new triangle
@@ -25,6 +28,10 @@ public class Triangle2D {
         this.a = a;
         this.b = b;
         this.c = c;
+
+        // calc circumcenter and radius
+        circumcenter = getCircumcenter();
+        radius = a.sub(circumcenter).mag();
     }
 
     /**
@@ -89,9 +96,10 @@ public class Triangle2D {
 
     /**
      * Computes the center of the circumcircle
+     *
      * @return
      */
-    public Vector2D getCircumcenter() {
+    private Vector2D getCircumcenter() {
         //https://www.ics.uci.edu/~eppstein/junkyard/circumcenter.html
 
         double D = a.sub(c).x * b.sub(c).y - b.sub(c).x * a.sub(c).y;
