@@ -240,4 +240,16 @@ public class Triangle2D {
         return "Triangle2D[" + a + ", " + b + ", " + c + "]";
     }
 
+    /**
+     * Return the edges of this triangle
+     *
+     * @return array of edges
+     */
+    public Edge2D[] getEdges() {
+        return new Edge2D[]{
+                new Edge2D(a, b),
+                new Edge2D(b, c),
+                new Edge2D(c, a),
+        };
+    }
 }

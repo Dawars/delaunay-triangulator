@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * A Java implementation of an incremental 2D Delaunay triangulation algorithm.
- * 
+ *
  * @author Johannes Diemke
  */
 public class DelaunayTriangulator {
@@ -14,14 +14,15 @@ public class DelaunayTriangulator {
     private List<Vector2D> pointSet;
     public TriangleSoup triangleSoup;
 
+    public ArrayList<Edge2D> fixedEdges = new ArrayList<>();
+    public ArrayList<Edge2D> hull = new ArrayList<>(); // border edges are fixed by default
+
     /**
      * Constructor of the SimpleDelaunayTriangulator class used to create a new
      * triangulator instance.
-     * 
-     * @param pointSet
-     *            The point set to be triangulated
-     * @throws NotEnoughPointsException
-     *             Thrown when the point set contains less than three points
+     *
+     * @param pointSet The point set to be triangulated
+     * @throws NotEnoughPointsException Thrown when the point set contains less than three points
      */
     public DelaunayTriangulator(List<Vector2D> pointSet) {
         this.pointSet = pointSet;
@@ -31,7 +32,7 @@ public class DelaunayTriangulator {
     /**
      * This method generates a Delaunay triangulation from the specified point
      * set.
-     * 
+     *
      * @throws NotEnoughPointsException
      */
     public void triangulate() throws NotEnoughPointsException {
@@ -134,15 +135,14 @@ public class DelaunayTriangulator {
 
     /**
      * This method legalizes edges by recursively flipping all illegal edges.
-     * 
-     * @param triangle
-     *            The triangle
-     * @param edge
-     *            The edge to be legalized
-     * @param newVertex
-     *            The new vertex
+     *
+     * @param triangle  The triangle
+     * @param edge      The edge to be legalized
+     * @param newVertex The new vertex
      */
     private void legalizeEdge(Triangle2D triangle, Edge2D edge, Vector2D newVertex) {
+        if (isEdgeFixed(edge)) return; // if constrained, edge splitting will take care of this first
+
         Triangle2D neighbourTriangle = triangleSoup.findNeighbour(triangle, edge);
 
         /**
@@ -178,9 +178,8 @@ public class DelaunayTriangulator {
 
     /**
      * Shuffles the point set using a custom permutation sequence.
-     * 
-     * @param permutation
-     *            The permutation used to shuffle the point set
+     *
+     * @param permutation The permutation used to shuffle the point set
      */
     public void shuffle(int[] permutation) {
         List<Vector2D> temp = new ArrayList<Vector2D>();
@@ -192,7 +191,7 @@ public class DelaunayTriangulator {
 
     /**
      * Returns the point set in form of a vector of 2D vectors.
-     * 
+     *
      * @return Returns the points set.
      */
     public List<Vector2D> getPointSet() {
@@ -202,11 +201,165 @@ public class DelaunayTriangulator {
     /**
      * Returns the trianges of the triangulation in form of a vector of 2D
      * triangles.
-     * 
+     *
      * @return Returns the triangles of the triangulation.
      */
     public List<Triangle2D> getTriangles() {
         return triangleSoup.getTriangles();
     }
 
+    /**
+     * Toggle edge if not convex hull
+     *
+     * @param edge
+     */
+    public void toggleEdge(Edge2D edge) {
+        if (fixedEdges.contains(edge)) { // deselect
+            fixedEdges.remove(edge);
+        } else { // select
+            if (!hull.contains(edge)) {
+                fixedEdges.add(edge);
+            }
+        }
+    }
+
+    public void calculateHull() {
+        hull.clear();
+
+        // triangles having no neighbor - good for inner borders
+        List<Triangle2D> triangles = getTriangles();
+        for (Triangle2D tri : triangles) {
+            Edge2D[] edges = {
+                    new Edge2D(tri.a, tri.b),
+                    new Edge2D(tri.b, tri.c),
+                    new Edge2D(tri.c, tri.a),
+            };
+
+            for (Edge2D edge : edges) {
+                if (triangleSoup.findNeighbour(tri, edge) == null)
+                    hull.add(edge);
+            }
+        }
+    }
+
+    /**
+     * Inserts vertex in the middle of an edge, splits adjacent triangles, updates edge constraints
+     *
+     * @param edge being split
+     */
+    public void splitEdge(Edge2D edge) {
+        TriangleSoup soup = triangleSoup;
+        Triangle2D tri1 = soup.findOneTriangleSharing(edge);
+        Triangle2D tri2 = soup.findNeighbour(tri1, edge);
+
+        Vector2D middle = edge.a.add(edge.b).mult(0.5);
+
+        Triangle2D[] tris = {tri1, tri2};
+        for (Triangle2D tri : tris) {
+            if (tri == null) // if first triangle is null, edge is not in any triangle, otherwise border
+                continue;
+
+            soup.remove(tri);
+
+            // selecting opposing vertex to edge
+            Vector2D point = tri.getNoneEdgeVertex(edge);
+
+            soup.add(new Triangle2D(point, edge.a, middle));
+            soup.add(new Triangle2D(point, edge.b, middle));
+        }
+        pointSet.add(middle);
+
+        if (fixedEdges.contains(edge)) {
+            fixedEdges.remove(edge);
+            fixedEdges.add(new Edge2D(edge.a, middle));
+            fixedEdges.add(new Edge2D(edge.b, middle));
+        }
+
+        try {
+            triangulate();
+        } catch (NotEnoughPointsException e) {
+
+        }
+    }
+
+    /**
+     * Insert a vertex to the circumcenter of the triangle and restore triangulation
+     *
+     * @param triangle
+     * @return null if successful, edge that the new vertex would encroach
+     */
+    public Edge2D insertCircumcenter(Triangle2D triangle) {
+        TriangleSoup soup = triangleSoup;
+
+        Vector2D center = triangle.circumcenter;
+
+        // does inserted vertex encroach an edge?
+        // only check the containing triangle (visibility)
+        Triangle2D containingTriangle = soup.findContainingTriangle(center);
+        Edge2D[] edges = containingTriangle.getEdges();
+
+        for (Edge2D edge : edges) {
+            if (edge.isEncroached(center) && isEdgeFixed(edge)) {
+                return edge;
+            }
+        }
+
+        getPointSet().add(center);
+
+
+        // find neighbors of triangle to retriangulate, https://en.wikipedia.org/wiki/Bowyer%E2%80%93Watson_algorithm
+        List<Triangle2D> badTriangles = soup.findNeighbours(containingTriangle);
+
+        for (Edge2D e : edges) {
+            Triangle2D newTri = new Triangle2D(e.a, e.b, center);
+            soup.add(newTri);
+            badTriangles.add(newTri);
+        }
+
+        soup.remove(containingTriangle);
+
+        // constrained delaunay tri
+        try {
+            triangulate();
+        } catch (NotEnoughPointsException e) {
+
+        }
+/*
+        for (Triangle2D tri : badTriangles) {
+            // bad tris are constructed that a-b edge is opposite to center vertex
+            legalizeEdge(tri, new Edge2D(tri.a, tri.b), center); // fixme
+        }*/
+
+        return null;
+    }
+
+
+    /**
+     * Find encroached edges from the input graph (border and fixed)
+     *
+     * @return null if no such edge exists
+     */
+    public Edge2D findEncroachedEdge() {
+        for (int i = 0; i < fixedEdges.size() + hull.size(); i++) {
+            Edge2D edge = i < fixedEdges.size() ? fixedEdges.get(i) : hull.get(i - fixedEdges.size());
+
+            for (Vector2D point : pointSet) {
+                if (edge.isEncroached(point)) {
+                    return edge;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Fixes an encroached vertex by edge splitting
+     */
+    public void fixEncroached(Edge2D edge) {
+        splitEdge(edge);
+    }
+
+    public boolean isEdgeFixed(Edge2D edge) {
+        return fixedEdges.contains(edge) || hull.contains(edge);
+    }
 }
