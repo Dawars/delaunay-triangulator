@@ -26,6 +26,7 @@ public class Edge2D {
     }
 
     public boolean isEncroached(Vector2D point) {
+        if (a == point || b == point) return false;
         Vector2D middle = a.add(b).mult(0.5);
         return point.sub(middle).mag() < radius;
     }

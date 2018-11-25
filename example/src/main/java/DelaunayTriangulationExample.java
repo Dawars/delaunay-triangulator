@@ -31,7 +31,7 @@ import static java.lang.Thread.sleep;
  */
 public class DelaunayTriangulationExample implements GLEventListener, MouseListener, MouseMotionListener, KeyListener {
 
-    private static final Dimension DIMENSION = new Dimension(1000, 600);
+    private static final Dimension DIMENSION = new Dimension(1000, 700);
 
     private static final Color COLOR_TRIANGLE_FILL = new Color(26, 121, 121);
     private static final Color COLOR_SMALLEST_ANGLE = new Color(200, 121, 121);
@@ -62,7 +62,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
     private long animSpeed = 500;
 
     double areaConstraint = Double.MAX_VALUE;
-    double angleConstraint = Double.MIN_VALUE;
+    double angleConstraint = 0;
 
     public static void main(String[] args) throws ClassNotFoundException, UnsupportedLookAndFeelException, InstantiationException, IllegalAccessException {
         UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -129,11 +129,22 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         mb.add(actionMenu);
 
 
+        Menu examplesMenu = new Menu("Examples");
+        MenuItem angleLimitItem = new MenuItem("Adaptive triangulation");
+        MenuItem fixedEdgeItem = new MenuItem("Fixed edge");
+        examplesMenu.add(angleLimitItem);
+        examplesMenu.add(fixedEdgeItem);
+
+        mb.add(examplesMenu);
+
+
         Menu viewMenu = new Menu("View");
         MenuItem showCircleItem = new MenuItem("Show/hide circumcircle");
         MenuItem showCircleCenterItem = new MenuItem("Show/hide circumcircle centers");
+        MenuItem clearDebugItem = new MenuItem("Clear debug markings");
         viewMenu.add(showCircleItem);
         viewMenu.add(showCircleCenterItem);
+        viewMenu.add(clearDebugItem);
         mb.add(viewMenu);
 
         Menu constraintMenu = new Menu("Constraints");
@@ -148,17 +159,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         // listeners
 
 
-        newItem.addActionListener(e -> {
-            pointSet.clear();
-            try {
-                delaunayTriangulator.triangulate();
-            } catch (NotEnoughPointsException e1) {
-            }
-            clearDebugDrawings();
-            statusText = "New canvas";
-
-            updateCalculations();
-        });
+        newItem.addActionListener(e -> newCanvas());
 
         saveItem.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
@@ -249,73 +250,18 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
             canvas.display();
         });
 
-
+        clearDebugItem.addActionListener(e -> {
+            clearDebugDrawings();
+            canvas.display();
+        });
         animationItem.addActionListener(e -> {
             isRunning = true;
             new Thread(() -> {
                 clearDebugDrawings();
-                int i = 0;
                 Edge2D edge = delaunayTriangulator.findEncroachedEdge();
 
-                while (getArea(largestArea) > areaConstraint || edge != null) {
-
-                    if (edge != null) { // e is encroached by a vertex
-                        debugLines.add(edge);
-                        Vector2D middle = edge.a.add(edge.b).mult(0.5);
-                        double radius = edge.a.sub(edge.b).mag() / 2d;
-
-                        debugCircles.add(new Pair<>(middle, radius));
-
-                        Vector2D middle1 = edge.a.add(edge.b.sub(edge.a).mult(0.25));
-                        Vector2D middle2 = edge.a.add(edge.b.sub(edge.a).mult(0.75));
-
-                        debugCircles.add(new Pair<>(middle1, radius / 2));
-                        debugCircles.add(new Pair<>(middle2, radius / 2));
-                        statusText = "Splitting edge " + edge;
-
-                    } else {
-                        debugTris.add(largestArea);
-                        debugCircles.add(new Pair<>(largestArea.circumcenter, 2d));
-                        statusText = "Inserting circumcenter in " + largestArea;
-                    }
-
-                    canvas.display();
-                    try {
-                        sleep(animSpeed);
-                    } catch (InterruptedException e1) {
-                        e1.printStackTrace();
-                    }
-
-                    if (edge != null) {
-                        delaunayTriangulator.splitEdge(edge);
-                    } else {
-                        Edge2D edge2split = delaunayTriangulator.insertCircumcenter(largestArea);
-                        if (edge2split != null) {
-                            clearDebugDrawings();
-                            debugLines.add(edge2split);
-
-                            Vector2D middle = edge2split.a.add(edge2split.b).mult(0.5);
-                            double radius = edge2split.a.sub(edge2split.b).mag() / 2d;
-
-                            debugCircles.add(new Pair<>(middle, radius));
-
-                            Vector2D middle1 = edge2split.a.add(edge2split.b.sub(edge2split.a).mult(0.25));
-                            Vector2D middle2 = edge2split.a.add(edge2split.b.sub(edge2split.a).mult(0.75));
-
-                            debugCircles.add(new Pair<>(middle1, radius / 2));
-                            debugCircles.add(new Pair<>(middle2, radius / 2));
-                            canvas.display();
-
-                            try {
-                                sleep(animSpeed);
-                            } catch (InterruptedException e1) {
-                                e1.printStackTrace();
-                            }
-
-                            delaunayTriangulator.splitEdge(edge2split);
-                        }
-                    }
-
+                while (getSmallestAngle(minAngle) < angleConstraint || getArea(largestArea) > areaConstraint || edge != null) {
+                    stepAlgorithm(true);
 
                     try {
                         sleep(animSpeed);
@@ -327,14 +273,90 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                     updateCalculations();
                     edge = delaunayTriangulator.findEncroachedEdge();
 
-                    i++;
-
                 }
 
                 statusText = "Finished";
             }).start();
         });
 
+        fixedEdgeItem.addActionListener(e -> {
+            newCanvas();
+
+            Vector2D origin = new Vector2D(canvas.getWidth() / 2., canvas.getHeight() / 2. - 30);
+
+            Vector2D[] points = {
+                    new Vector2D(-1, -0.6),
+                    new Vector2D(-1, 0.6),
+                    new Vector2D(1, -0.6),
+                    new Vector2D(1, 0.6),
+
+                    new Vector2D(-0.4, 0),
+                    new Vector2D(-0.8, 0.4),
+                    new Vector2D(-0.8, -0.4),
+
+                    new Vector2D(-0.4 + 0.06, 0),
+                    new Vector2D(-0.8 + 0.06, 0.4),
+                    new Vector2D(-0.8 + 0.06, -0.4),
+
+                    new Vector2D(0.4001, 0),
+                    new Vector2D(0.4002, 0.4),
+                    new Vector2D(0.40005, -0.4),
+
+            };
+
+
+            for (Vector2D point : points) {
+                pointSet.add(point.mult(400).add(origin));
+            }
+
+            try {
+                delaunayTriangulator.triangulate();
+            } catch (NotEnoughPointsException e1) {
+                e1.printStackTrace();
+            }
+
+            updateCalculations();
+            canvas.display();
+        });
+
+
+        angleLimitItem.addActionListener(e -> {
+            newCanvas();
+
+            Vector2D origin = new Vector2D(canvas.getWidth() / 2., canvas.getHeight() / 2. - 30);
+
+            Vector2D[] points = {
+//                    new Vector2D(-1, -0.6),
+//                    new Vector2D(-1, 0.6),
+                    new Vector2D(1, -0.6),
+                    new Vector2D(1, 0.6),
+
+
+            };
+
+
+            for (Vector2D point : points) {
+                pointSet.add(point.mult(400).add(origin));
+            }
+
+            double res = 30;
+
+            for (int i = 0; i <= res; i++) {
+                double x0 = Math.sin(Math.PI * i / res);
+                double y0 = i / res;
+                pointSet.add(new Vector2D(-1 - x0 / 10, 1.2 * y0 - 0.6).mult(400).add(origin));
+
+            }
+
+            try {
+                delaunayTriangulator.triangulate();
+            } catch (NotEnoughPointsException e1) {
+                e1.printStackTrace();
+            }
+
+            updateCalculations();
+            canvas.display();
+        });
 
         setAreaItem.addActionListener(e -> {
             String response = JOptionPane.showInputDialog(frame,
@@ -365,6 +387,20 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         });
     }
 
+    Random rand = new Random();
+
+    private void newCanvas() {
+        pointSet.clear();
+        try {
+            delaunayTriangulator.triangulate();
+        } catch (NotEnoughPointsException e1) {
+        }
+        clearDebugDrawings();
+        statusText = "New canvas";
+
+        updateCalculations();
+    }
+
     private void clearDebugDrawings() {
         debugLines.clear();
         debugTris.clear();
@@ -385,9 +421,6 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
             // todo load triangles
 
 
-            clearDebugDrawings();
-            updateCalculations();
-            canvas.display();
             System.out.println("File successfully loaded");
 
         } catch (FileNotFoundException e1) {
@@ -397,6 +430,9 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
             e1.printStackTrace();
         }
 
+        clearDebugDrawings();
+        updateCalculations();
+        canvas.display();
     }
 
     private void ruppersAlgorithm() {
@@ -422,7 +458,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         Edge2D edge = delaunayTriangulator.findEncroachedEdge();
         Triangle2D tri2Insert = null;
         if (edge == null) {
-            tri2Insert = getSmallestAngle(minAngle) < angleConstraint ? minAngle : getArea(largestArea) > areaConstraint ? largestArea : null;
+            tri2Insert = angleConstraint > 0 && getSmallestAngle(minAngle) < angleConstraint ? minAngle : getArea(largestArea) > areaConstraint ? largestArea : null;
         }
 
 
@@ -438,8 +474,8 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                 Vector2D middle1 = edge.a.add(edge.b.sub(edge.a).mult(0.25));
                 Vector2D middle2 = edge.a.add(edge.b.sub(edge.a).mult(0.75));
 
-                debugCircles.add(new Pair<>(middle1, radius / 2));
-                debugCircles.add(new Pair<>(middle2, radius / 2));
+//                debugCircles.add(new Pair<>(middle1, radius / 2));
+//                debugCircles.add(new Pair<>(middle2, radius / 2));
                 statusText = "Splitting edge " + edge;
 
             } else {
@@ -472,8 +508,8 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
                     Vector2D middle1 = edge2split.a.add(edge2split.b.sub(edge2split.a).mult(0.25));
                     Vector2D middle2 = edge2split.a.add(edge2split.b.sub(edge2split.a).mult(0.75));
 
-                    debugCircles.add(new Pair<>(middle1, radius / 2));
-                    debugCircles.add(new Pair<>(middle2, radius / 2));
+//                    debugCircles.add(new Pair<>(middle1, radius / 2));
+//                    debugCircles.add(new Pair<>(middle2, radius / 2));
                     canvas.display();
 
                     try {
@@ -660,7 +696,7 @@ public class DelaunayTriangulationExample implements GLEventListener, MouseListe
         gl.glEnd();
 
         // draw all points
-        gl.glPointSize(5.5f);
+        gl.glPointSize(10.5f);
         gl.glColor3f(0.2f, 1.2f, 0.25f);
 
         gl.glColor3ub((byte) COLOR_TRIANGLE_BORDER.getRed(), (byte) COLOR_TRIANGLE_BORDER.getGreen(),

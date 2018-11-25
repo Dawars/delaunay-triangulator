@@ -131,6 +131,8 @@ public class DelaunayTriangulator {
         triangleSoup.removeTrianglesUsing(superTriangle.a);
         triangleSoup.removeTrianglesUsing(superTriangle.b);
         triangleSoup.removeTrianglesUsing(superTriangle.c);
+
+        calculateHull();
     }
 
     /**
@@ -294,21 +296,21 @@ public class DelaunayTriangulator {
         Vector2D center = triangle.circumcenter;
 
         // does inserted vertex encroach an edge?
-        // only check the containing triangle (visibility)
         Triangle2D containingTriangle = soup.findContainingTriangle(center);
-        Edge2D[] edges = containingTriangle.getEdges();
-
-        for (Edge2D edge : edges) {
-            if (edge.isEncroached(center) && isEdgeFixed(edge)) {
-                return edge;
+        for (Triangle2D tri : triangleSoup.getTriangles()) {
+            for (Edge2D edge : tri.getEdges()) {
+                if (edge.isEncroached(center) && isEdgeFixed(edge)) {
+                    return edge;
+                }
             }
         }
 
         getPointSet().add(center);
 
 
-        // find neighbors of triangle to retriangulate, https://en.wikipedia.org/wiki/Bowyer%E2%80%93Watson_algorithm
+       /* // find neighbors of triangle to retriangulate, https://en.wikipedia.org/wiki/Bowyer%E2%80%93Watson_algorithm
         List<Triangle2D> badTriangles = soup.findNeighbours(containingTriangle);
+        Edge2D[] edges = containingTriangle.getEdges();
 
         for (Edge2D e : edges) {
             Triangle2D newTri = new Triangle2D(e.a, e.b, center);
@@ -317,17 +319,17 @@ public class DelaunayTriangulator {
         }
 
         soup.remove(containingTriangle);
-
+*/// buggy when point falls on an edge
         // constrained delaunay tri
         try {
             triangulate();
         } catch (NotEnoughPointsException e) {
 
         }
-/*
+/*// create new triangulation with these tris and replace in big one
         for (Triangle2D tri : badTriangles) {
             // bad tris are constructed that a-b edge is opposite to center vertex
-            legalizeEdge(tri, new Edge2D(tri.a, tri.b), center); // fixme
+            legalizeEdge(tri, new Edge2D(tri.a, tri.b), center);
         }*/
 
         return null;
